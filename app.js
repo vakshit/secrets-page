@@ -6,6 +6,8 @@ const mongoose = require('mongoose');
 const session = require('express-session');
 const passport = require('passport');
 const passportLocalMongoose = require('passport-local-mongoose');
+const GoogleStrategy = require('passport-google-oauth20');
+const findOrCreate = require('mongoose-findorcreate');
 
 const app = express();
 
@@ -17,6 +19,8 @@ app.use(express.urlencoded({
   extended: true
 }));
 
+// passport using way //
+
 app.use(session({
   secret: process.env.SECRET, // need to refer documentation for all these parameters
   resave: false,
@@ -25,24 +29,52 @@ app.use(session({
 
 app.use(passport.initialize());
 app.use(passport.session());
+// passport using way//
 
-mongoose.connect('mongodb://localhost:27017/userDB');
+mongoose.connect('mongodb://localhost:27017/userDB');  // connecting to database
 
-const userSchema = new mongoose.Schema( {
+const userSchema = new mongoose.Schema( { // creating a schema
   email: String,
-  password: String
+  password: String,
+  googleId: String
 });
 
-userSchema.plugin(passportLocalMongoose);
+
+userSchema.plugin(passportLocalMongoose); // using Passport Local MOngoose plugin
+userSchema.plugin(findOrCreate);
 
 
-const User = mongoose.model('User', userSchema);
+const User = mongoose.model('User', userSchema); // created model
 
+
+// passport usage way //
 passport.use(User.createStrategy());
+passport.serializeUser(function(user, done) {
+  done(null, user.id);
+});
 
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+passport.deserializeUser(function(id, done) {
+  User.findById(id, function(err, user) {
+    done(err, user);
+  });
+});
+// passport usage way //
 
+
+// using google OAuth //
+passport.use(new GoogleStrategy({   // auth strategy for passport using google OAuth
+  clientID: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET,
+  callbackURL: "http://localhost:3000/auth/google/secrets",
+  userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo"
+},
+function(accessToken, refreshToken, profile, cb) {
+  // console.log(profile);
+  User.findOrCreate({ googleId: profile.id }, function (err, user) {
+    return cb(err, user);
+  });
+}
+));
 
 
 
@@ -56,10 +88,25 @@ app.get('/secrets', function(req, res){
   if (req.isAuthenticated()) {
     res.render('secrets');
   } else {
-    res.redirect('/');
+    res.redirect('/login');
   }
   
 })
+
+// ----------------------------- Google auth Section-------------------------- //
+
+app.get('/auth/google', // authenticating it with google
+  passport.authenticate('google', {scope: ['profile']}) // scope is the data that we will get from google servers
+);
+
+app.get('/auth/google/secrets', 
+  passport.authenticate('google', {failureRedirect: '/'}), // authenticating locally and saving the session as a cookie
+  function(req, res) {
+    res.redirect('/secrets');
+  }
+)
+
+// ----------------------------- Google auth Section-------------------------- //
 
 // ----------------------------- Register Section-------------------------- // 
 
@@ -123,6 +170,8 @@ app.route('/logout')
 })
 
 // ----------------------------- LogOut Section-------------------------- // 
+
+
 
 
 
