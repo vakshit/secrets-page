@@ -36,7 +36,8 @@ mongoose.connect('mongodb://localhost:27017/userDB');  // connecting to database
 const userSchema = new mongoose.Schema( { // creating a schema
   email: String,
   password: String,
-  googleId: String
+  googleId: String,
+  secrets: [String]
 });
 
 
@@ -84,13 +85,15 @@ app.get('/', function(req, res) {
 });
 
 app.get('/secrets', function(req, res){
-  console.log(req.user);
-  if (req.isAuthenticated()) {
-    res.render('secrets');
-  } else {
-    res.redirect('/login');
-  }
-  
+
+  User.find({secrets: {$ne: null}}, function(err, foundUsers){
+    if (err){
+      res.send(err);
+    } else {
+      res.render('secrets', {userSecretsArray: foundUsers}); 
+      // res.send(foundUsers[1]);
+    }
+  })
 })
 
 // ----------------------------- Google auth Section-------------------------- //
@@ -172,6 +175,35 @@ app.route('/logout')
 // ----------------------------- LogOut Section-------------------------- // 
 
 
+
+// ----------------------------- Secret Submission Section-------------------------- // 
+
+app.route('/submit')
+.get(function(req, res){
+  if (req.isAuthenticated()){
+    res.render('submit');
+  } else {
+    res.redirect('/login')
+  }
+})
+
+.post(function(req, res){
+  const submittedSecret = req.body.secret;
+
+  User.findById(req.user.id, function(err, foundUser){
+    if (err){
+      res.send(err);
+    } else {
+      if (foundUser){
+        foundUser.secrets.push(submittedSecret)
+        foundUser.save();
+        res.redirect('/secrets');
+      }
+    }
+  })
+})
+
+// ----------------------------- Secret Submission Section-------------------------- // 
 
 
 
